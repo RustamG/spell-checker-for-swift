@@ -23,10 +23,14 @@ class SpellVisitor: SyntaxVisitor {
     
     override func visit(_ token: TokenSyntax) -> SyntaxVisitorContinueKind {
         for comment in token.leadingTrivia.compactMap({ $0.comment }) {
-            let misspellRange = spellChecker.checkSpelling(of: comment, startingAt: 0)
-            if misspellRange.location < comment.count {
+            if ignoringSpellCheck(comment) {
+                return .skipChildren
+            }
+            let commentWithStrippedURLs = comment.stringByRemovingURLs()
+            let misspellRange = spellChecker.checkSpelling(of: commentWithStrippedURLs, startingAt: 0)
+            if misspellRange.location < commentWithStrippedURLs.count {
                 printMisspelled(forWordRange: misspellRange,
-                                in: comment,
+                                in: commentWithStrippedURLs,
                                 position: sourceLocationConverter.location(for: token.positionAfterSkippingLeadingTrivia))
             }
         }
@@ -37,18 +41,19 @@ class SpellVisitor: SyntaxVisitor {
              .identifier(let text),
              .dollarIdentifier(let text),
              .stringSegment(let text):
-            let formedText = text.reduce([]) { (r, c) -> [String] in
-                var _r = r
-                if c.isUppercase {
-                    _r.append(String(c))
-                } else if c == "_" || c == "." {
-                    _r.append("")
-                } else {
-                    var lastText = (_r.popLast() ?? "")
-                    lastText.append(c)
-                    _r.append(lastText)
-                }
-                return _r
+            let formedText = text.stringByRemovingURLs()
+                .reduce([]) { (r, c) -> [String] in
+                    var _r = r
+                    if c.isUppercase {
+                        _r.append(String(c))
+                    } else if c == "_" || c == "." || c == "," || c.isNumber {
+                        _r.append("")
+                    } else {
+                        var lastText = (_r.popLast() ?? "")
+                        lastText.append(c)
+                        _r.append(lastText)
+                    }
+                    return _r
                 }.joined(separator: " ")
             let misspelledRange = spellChecker.checkSpelling(of: formedText, startingAt: 0)
             if misspelledRange.location < formedText.count {
@@ -92,5 +97,23 @@ class SpellVisitor: SyntaxVisitor {
                            line: line,
                            column: column,
                            message: message)
+    }
+
+    private func ignoringSpellCheck(_ comment: String) -> Bool {
+
+        return comment.trimmingCharacters(in: .whitespaces).contains("spellcheck:disable:this")
+    }
+}
+
+private extension String {
+
+    func stringByRemovingURLs() -> String {
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else {
+            return self
+        }
+        return detector.stringByReplacingMatches(in: self,
+                                                 options: [],
+                                                 range: NSRange(location: 0, length: self.utf16.count),
+                                                 withTemplate: "")
     }
 }
