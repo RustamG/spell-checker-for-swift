@@ -42,6 +42,7 @@ class SpellVisitor: SyntaxVisitor {
              .dollarIdentifier(let text),
              .stringSegment(let text):
             let formedText = text.stringByRemovingURLs()
+                .stringBySplittingWhitespaces()
                 .reduce([]) { (r, c) -> [String] in
                     var _r = r
                     if c.isUppercase {
@@ -115,5 +116,11 @@ private extension String {
                                                  options: [],
                                                  range: NSRange(location: 0, length: self.utf16.count),
                                                  withTemplate: "")
+    }
+
+    func stringBySplittingWhitespaces() -> String {
+
+        return self.replacingOccurrences(of: "\\n", with: " ")
+            .replacingOccurrences(of: "\\t", with: " ")
     }
 }
